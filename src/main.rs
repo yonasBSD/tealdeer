@@ -68,6 +68,8 @@ const APP_INFO: AppInfo = AppInfo {
     name: NAME,
     author: NAME,
 };
+static TEALDEER_PAGE: &str =
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/pages/tealdeer.md"));
 
 /// Clear the cache
 fn clear_cache(cache: Cache, quietly: bool) -> Result<()> {
@@ -258,8 +260,20 @@ fn try_main(args: Cli, enable_styles: bool) -> Result<ExitCode> {
 
     // If a local file was passed in, render it and exit
     if let Some(file) = args.render {
-        let path = PageLookupResult::with_page(file);
-        print_page(&path, args.raw, enable_styles, args.pager, &config)?;
+        let reader = PageLookupResult::with_page(file).reader()?;
+        print_page(reader, args.raw, enable_styles, args.pager, &config)?;
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    // The tealdeer page is embedded in the binary, no cache needed
+    if command == "tealdeer" {
+        print_page(
+            TEALDEER_PAGE.as_bytes(),
+            args.raw,
+            enable_styles,
+            args.pager,
+            &config,
+        )?;
         return Ok(ExitCode::SUCCESS);
     }
 
@@ -407,7 +421,7 @@ fn try_main(args: Cli, enable_styles: bool) -> Result<ExitCode> {
             );
         }
 
-        let Some(lookup_result) = cache.find_page(&command) else {
+        let Some(result) = cache.find_page(&command) else {
             if !args.quiet {
                 print_warning(
                     enable_styles,
@@ -419,11 +433,16 @@ fn try_main(args: Cli, enable_styles: bool) -> Result<ExitCode> {
                     ),
                 );
             }
-
             return Ok(ExitCode::FAILURE);
         };
 
-        print_page(&lookup_result, args.raw, enable_styles, args.pager, &config)?;
+        print_page(
+            result.reader()?,
+            args.raw,
+            enable_styles,
+            args.pager,
+            &config,
+        )?;
     }
 
     Ok(ExitCode::SUCCESS)
