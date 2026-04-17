@@ -87,12 +87,11 @@ fn print_snippet(
     use PageSnippet::*;
 
     match snip {
-        CommandName(s) => write!(writer, "{}", s.paint(style.command_name)),
+        CommandName(s) | Title(s) => write!(writer, "{}", s.paint(style.command_name)),
         Variable(s) => write!(writer, "{}", s.paint(style.example_variable)),
         NormalCode(s) => write!(writer, "{}", s.paint(style.example_code)),
         Description(s) => write!(writer, "{}", s.paint(style.description)),
         Text(s) => write!(writer, "{}", s.paint(style.example_text)),
-        Title(s) => write!(writer, "{}", s.paint(style.command_name)),
         Linebreak => writeln!(writer),
     }
 }

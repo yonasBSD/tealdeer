@@ -431,7 +431,7 @@ fn get_languages<'a>(
     let mut lang_list = Vec::new();
     for locale in locales {
         if !locale.is_ascii() {
-            info!("Skipping non-ASCII locale string: {}", locale);
+            info!("Skipping non-ASCII locale string: {locale}");
             continue;
         }
 

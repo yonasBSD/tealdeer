@@ -16,6 +16,7 @@
 #![allow(clippy::struct_excessive_bools)]
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::unnecessary_debug_formatting)]
+#![allow(clippy::while_let_loop)]
 
 #[cfg(not(any(
     feature = "native-tls",

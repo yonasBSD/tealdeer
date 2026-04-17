@@ -230,13 +230,11 @@ fn is_freestanding_substring(surrounding: &str, substring: (usize, usize)) -> bo
     let char_before_is_okay = surrounding[..start]
         .chars()
         .last()
-        .filter(|prev_char| !prev_char.is_whitespace())
-        .is_none();
+        .is_none_or(char::is_whitespace);
     let char_after_is_okay = surrounding[end..]
         .chars()
         .next()
-        .filter(|next_char| !next_char.is_whitespace())
-        .is_none();
+        .is_none_or(char::is_whitespace);
     char_before_is_okay && char_after_is_okay
 }
 
