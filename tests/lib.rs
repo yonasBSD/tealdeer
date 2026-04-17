@@ -821,6 +821,24 @@ fn test_rendering_color_never() {
     );
 }
 
+/// An end-to-end integration test for the indent config option
+#[test]
+fn test_rendering_with_indentation() {
+    let testenv = TestEnv::new().install_default_cache();
+    let expected_custom_indentation = include_str!("rendered/inkscape-compact-no-color.expected");
+
+    // Configure to set base and command indents
+    testenv.append_to_config("display.indent.base = 3\n");
+    testenv.append_to_config("display.indent.command = 1\n");
+
+    testenv
+        .command()
+        .args(["--color", "never", "inkscape-v2"])
+        .assert()
+        .success()
+        .stdout(diff(expected_custom_indentation));
+}
+
 #[test]
 fn test_rendering_i18n() {
     _test_correct_rendering(

@@ -68,6 +68,7 @@ pub fn print_page(
             &mut process_snippet,
             !config.display.compact,
             config.display.show_title,
+            config.display.indent,
         )
         .context("Could not write to stdout")?;
     }
@@ -89,9 +90,9 @@ fn print_snippet(
         CommandName(s) => write!(writer, "{}", s.paint(style.command_name)),
         Variable(s) => write!(writer, "{}", s.paint(style.example_variable)),
         NormalCode(s) => write!(writer, "{}", s.paint(style.example_code)),
-        Description(s) => writeln!(writer, "  {}", s.paint(style.description)),
-        Text(s) => writeln!(writer, "  {}", s.paint(style.example_text)),
-        Title(s) => writeln!(writer, "  {}", s.paint(style.command_name)),
+        Description(s) => write!(writer, "{}", s.paint(style.description)),
+        Text(s) => write!(writer, "{}", s.paint(style.example_text)),
+        Title(s) => write!(writer, "{}", s.paint(style.command_name)),
         Linebreak => writeln!(writer),
     }
 }
