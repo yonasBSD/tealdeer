@@ -1,8 +1,9 @@
 use std::{
+    borrow::Cow,
     env, fmt,
     fs::{self, File},
     io::{ErrorKind, Write},
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     sync::LazyLock,
     time::Duration,
 };
@@ -574,6 +575,7 @@ impl<'a> Config<'a> {
             .path()
             .parent()
             .context("Failed to get config directory")?;
+        let home_path = env::home_dir();
 
         // Determine directories config. For this, we need to take some
         // additional factory into account, like env variables, or the
@@ -589,11 +591,13 @@ impl<'a> Config<'a> {
                 source: PathSource::EnvVar,
             }
         } else if let Some(config_value) = &raw_config.directories.cache_dir {
-            // If the user explicitly configured a cache directory, use that.
+            // Resolve possible ~ prefixed path
+            let expanded_path = expand_home(config_value, home_path.as_deref())?;
+            // Resolve possible relative path.
+            let resolved_path = relative_path_root.join(expanded_path);
+
             PathWithSource {
-                // Resolve possible relative path. It would be nicer to clean up the path, but Rust stdlib
-                // does not give any method for that that does not need the paths to exist.
-                path: relative_path_root.join(config_value),
+                path: resolved_path,
                 source: PathSource::ConfigFile,
             }
         } else if let Ok(default_dir) = get_app_root(AppDataType::UserCache, &crate::APP_INFO) {
@@ -610,11 +614,18 @@ impl<'a> Config<'a> {
             .directories
             .custom_pages_dir
             .as_ref()
-            .map(|path| PathWithSource {
+            .map(|path| -> Result<PathWithSource> {
+                // Resolve possible ~ prefixed path
+                let expanded_path = expand_home(path, home_path.as_deref())?;
                 // Resolve possible relative path.
-                path: relative_path_root.join(path),
-                source: PathSource::ConfigFile,
+                let resolved_path = relative_path_root.join(expanded_path);
+
+                Ok(PathWithSource {
+                    path: resolved_path,
+                    source: PathSource::ConfigFile,
+                })
             })
+            .transpose()?
             .or_else(|| {
                 get_app_root(AppDataType::UserData, &crate::APP_INFO)
                     .map(|path| {
@@ -640,6 +651,29 @@ impl<'a> Config<'a> {
             file_path: config_file_path,
         })
     }
+}
+
+/// Expands tilde (~) prefixed directories into its absolute version
+fn expand_home<'a>(input_path: &'a Path, home_path: Option<&Path>) -> Result<Cow<'a, Path>> {
+    let mut components = input_path.components();
+
+    if let Some(Component::Normal(first_component_raw)) = components.next() {
+        let first_component = first_component_raw
+            .to_str()
+            .ok_or(anyhow!("Path contains invalid UTF-8"))?;
+
+        if first_component == "~" {
+            let home_path = home_path.ok_or(anyhow!("Unable to find user home directory"))?;
+            let rest: PathBuf = components.collect();
+            let expanded = home_path.join(rest);
+
+            return Ok(Cow::Owned(expanded));
+        } else if first_component.starts_with('~') {
+            return Err(anyhow!("Tilde expansion with a login name not supported"));
+        }
+    }
+
+    Ok(Cow::Borrowed(input_path))
 }
 
 /// The [`ConfigLoader`] is used to load a [`Config`] from a file.
@@ -788,6 +822,63 @@ mod test {
         let serialized = toml::to_string(&raw_config).unwrap();
         let deserialized: RawConfig = toml::from_str(&serialized).unwrap();
         assert_eq!(raw_config, deserialized);
+    }
+
+    #[test]
+    fn expand_path_with_valid_home() {
+        let home = Some(PathBuf::from("/foo/bar"));
+        let path_to_expand = PathBuf::from("~/baz");
+
+        assert_eq!(
+            *expand_home(&path_to_expand, home.as_deref()).unwrap(),
+            PathBuf::from("/foo/bar/baz")
+        );
+    }
+
+    #[test]
+    fn expand_path_with_absolute_path() {
+        let home = Some(PathBuf::from("/foo/bar"));
+        let dir_to_expand = PathBuf::from("/one/two");
+
+        assert_eq!(
+            *expand_home(&dir_to_expand, home.as_deref()).unwrap(),
+            dir_to_expand
+        );
+    }
+
+    #[test]
+    fn error_with_tilde_username() {
+        let home = Some(PathBuf::from("/foo/bar"));
+        let dir_to_expand = PathBuf::from("~baz/foo");
+
+        assert!(expand_home(&dir_to_expand, home.as_deref()).is_err());
+    }
+
+    #[test]
+    fn expand_tilde_in_config_file() {
+        let mut raw_config = RawConfig::default();
+        raw_config.directories.cache_dir = Some("~/my/custom_cache".into());
+        raw_config.directories.custom_pages_dir = Some("~/custom_pages".into());
+
+        let config = Config::from_raw(
+            &raw_config,
+            PathWithSource {
+                path: PathBuf::from("/path/to/config/config.toml"),
+                source: PathSource::OsConvention,
+            },
+        )
+        .unwrap();
+
+        let home_dir = env::home_dir().unwrap();
+
+        assert_eq!(
+            config.directories.cache_dir.path(),
+            home_dir.join("my/custom_cache")
+        );
+        assert_eq!(
+            config.directories.custom_pages_dir.unwrap().path(),
+            home_dir.join("custom_pages")
+        );
     }
 
     #[test]
